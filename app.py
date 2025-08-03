@@ -3,7 +3,7 @@ import re
 
 # Configuração inicial para tema visual (escuro, fontes e ícones)
 st.set_page_config(
-    page_title="SARA - Sistema de Análise de Risco Automatizado",
+   "<h1 style='color:#F1C40F;'>🕵️‍♀️ SARA — Sistema de Análise de Risco Automatizado</h1>",
     page_icon="🔎",
     layout="centered",
     initial_sidebar_state="collapsed"
@@ -161,4 +161,5 @@ if user_input:
     st.markdown(f"<div class='user-bubble'>💬 {user_input}</div>", unsafe_allow_html=True)
     st.markdown(avaliar_risco_completo(user_input), unsafe_allow_html=True)
 else:
+
     st.info("Preencha a caixa acima com a descrição do caso de atendimento para análise investigativa.")
