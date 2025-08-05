@@ -1,70 +1,65 @@
 import streamlit as st
 import re
 
-st.set_page_config(
-    page_title="SARA - Sistema de Análise de Risco Automatizado",
-    page_icon="🕵️‍♀️",
-    layout="centered",
-    initial_sidebar_state="collapsed"
-)
-
 st.markdown("""
 <style>
-body, .stApp { background-color: #101824 !important; color: #E0E6EC; }
-div[data-testid="stTextArea"] > div > textarea { background: #232d36 !important; color: #E0E6EC !important; font-size:16px;}
-.stButton>button { 
+body, .stApp { background-color: #0B2611 !important; color: #B2F2BB; }
+.stButton>button {
     color: #fff;
-    background: linear-gradient(90deg, #008B8B 0%, #00596d 100%) !important;
-    border: 1px solid #F1C40F;
-    border-radius: 5px;
+    background: linear-gradient(90deg, #2EB82E 0%, #006600 100%) !important;
+    border: 1px solid #00FF00;
+    border-radius: 8px;
     font-weight: bold;
     font-size: 18px;
     padding: 0.4em 2em !important;
 }
 .analysis-bubble {
-    background: #172734;
-    border-left: 4px solid #F1C40F;
+    background: #153715;
+    border-left: 4px solid #00FF00;
     padding: 1em;
-    border-radius: 10px;
+    border-radius: 12px;
     margin-bottom: 1.5em;
-    color: #FFD700;
+    color: #A9FFA9;
     font-family: 'Consolas', monospace;
 }
 .user-bubble {
-    background: #23313D;
+    background: #204220;
     padding: 1em;
     border-radius: 10px;
     margin-bottom: 1em;
-    color: #B2DFDB;
+    color: #D0FFCE;
     font-style: italic;
 }
 .risk-highlight {
-    color: #FFD700;
+    color: #00FF00;
     font-weight: bold;
-    background: #14334B;
-    border-radius: 5px;
-    padding: 2px 6px;
+    background: #013300;
+    border-radius: 6px;
+    padding: 3px 8px;
 }
 .tip-highlight {
-    color: #FFD700;
-    background: #2b260b;
-    border-radius: 6px;
-    padding: 6px 12px;
-    display: block;
-    margin: 10px 0;
+    color: #00FF00;
+    background: #003300;
+    border-radius: 8px;
+    padding: 8px 12px;
     font-weight: bold;
-}
-.q-highlight {
-    color: #FCF6A9; 
-    background: #423e0e; 
-    border-radius: 6px; 
-    padding: 3px 10px; 
-    margin: 5px 0;
-    font-family: 'Consolas', monospace;
-    font-size: 17px;
+    margin-top: 10px;
+    margin-bottom: 10px;
     display: block;
+}
+.footer-signature {
+    font-family: 'Courier New', Courier, monospace;
+    text-align: center;
+    margin-top: 40px;
+    color: #3BCB57;
+    font-weight: bold;
+    font-size: 16px;
 }
 </style>
+
+<div class="footer-signature">
+    Desenvolvido por Jairo Sousa
+</div>
 """, unsafe_allow_html=True)
 
 st.markdown("<h1 style='color:#F1C40F;'>🕵️‍♀️ SARA — Sistema de Análise de Risco Automatizado</h1>", unsafe_allow_html=True)
@@ -240,3 +235,4 @@ if user_input:
     st.markdown(avaliar_risco_completo(user_input), unsafe_allow_html=True)
 else:
     st.info("Preencha a caixa acima com a descrição do caso de atendimento para análise investigativa.")
+
