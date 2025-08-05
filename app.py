@@ -11,6 +11,7 @@ st.set_page_config(
 st.markdown("""
 <style>
 body, .stApp { background-color: #101824 !important; color: #E0E6EC; }
+div[data-testid="stTextArea"] > div > textarea { background: #232d36 !important; color: #E0E6EC !important; font-size:16px;}
 .stButton>button { 
     color: #fff;
     background: linear-gradient(90deg, #008B8B 0%, #00596d 100%) !important;
@@ -53,134 +54,184 @@ body, .stApp { background-color: #101824 !important; color: #E0E6EC; }
     margin: 10px 0;
     font-weight: bold;
 }
+.q-highlight {
+    color: #FCF6A9; 
+    background: #423e0e; 
+    border-radius: 6px; 
+    padding: 3px 10px; 
+    margin: 5px 0;
+    font-family: 'Consolas', monospace;
+    font-size: 17px;
+    display: block;
+}
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown("<h1 style='color:#F1C40F;'>🕵️‍♀️ SARA — Sistema de Análise de Risco Automatizado</h1>", unsafe_allow_html=True)
-st.markdown("**Converse com a SARA! Digite o caso/relato do cliente para investigar juntas.**<br><span style='font-size:15px;color:#BBB;'>Exemplo: 'CPF, DDD 011, TPV 150mil, pediu 8 máquinas Smart, aceitou proposta sem negociar, CNAE divergente, CNPJ criado há 15 dias...'</span>", unsafe_allow_html=True)
-
+st.markdown("**Converse com a SARA! Digite o caso/relato do cliente e receba orientação investigativa prática.**<br><span style='font-size:15px;color:#BBB;'>Exemplo: 'Cliente CPF recém-aberto, DDD 011, TPV 200mil, pediu 8 máquinas Smart, aceitou taxas sem negociar, CNAE divergente, comprovante: print nada a ver'</span>", unsafe_allow_html=True)
 user_input = st.text_area("🕵️‍♀️ O que você observou nesse atendimento?", height=120)
 
 def avaliar_risco_completo(relato):
     relato = relato.lower()
     motivos = []
-    sugestoes = set()
     dicas_extra = []
+    perguntas_recomendadas = []
+    sugestoes = set()
 
-    # DDD São Paulo
-    ddd_sp = False
-    ddd_regex = re.compile(r"\b0?(11|12|13|14|15|16|17|18|19)\b")
-    if ddd_regex.search(relato): motivos.append("DDD de São Paulo"); ddd_sp = True
+    # --- DETECÇÃO DE TIPOS E ATRIBUTOS ---
+    cnpj_novo = any(x in relato for x in [
+        "cnpj novo", "cnpj criado há 30 dias", "cnpj aberto há 30 dias",
+        "cnpj criado recentemente", "cnpj aberto recentemente", "cnpj recente"
+    ])
+    cnae_div = any(x in relato for x in [
+        "cnae diferente", "cnae divergente", "atividade diferente", "ramo divergente"
+    ])
+    aceitou_sem_negociar = any(x in relato for x in [
+        "aceitou proposta sem negociar", "aceitou taxa sem negociar", "aceitou taxa", "aceitaram sem negociar", "aceitou proposta", "não negociou taxa"
+    ])
+    ramo_alimenticio = any(x in relato for x in [
+        "alimentício", "restaurante", "bar", "lanchonete", "marmita", "food", "pizzaria", "padaria", "cafeteria", "mercearia"
+    ])
+    ddd_sp = bool(re.search(r"\b0?(11|12|13|14|15|16|17|18|19)\b", relato))
+    modelos_risco = any(m in relato for m in [
+        "smart", "p2", "pinpad", "pin pad", "wisepad"
+    ])
+    flex = any(k in relato for k in [
+        "pré-ativa", "preativa", "plano flex", "transferido do front", "conta pré-ativa"
+    ])
+    maquinas_regex = re.search(r"(\d+)\s*(máquina|maquinas|maquininhas|maquininha)", relato)
+    num_maquinas = int(maquinas_regex.group(1)) if maquinas_regex else 0
 
-    # Ramo alimentício
-    ramos_alimenticios = ["alimentício", "restaurante", "bar", "lanchonete", "marmita", "food", "pizzaria", "padaria", "cafeteria", "mercearia"]
-    ramo_ali = any(r in relato for r in ramos_alimenticios)
-    if ramo_ali: motivos.append("Ramo alimentício")
-
-    # TPV muito alto (> R$100.000)
+    # TPV
     tpv_val = 0
     tpv_regex = re.search(r"tpv.*?([\d\.\-, ]+)(mil|k|mil reais|reais)?", relato)
     if tpv_regex:
         val = tpv_regex.group(1).replace(".", "").replace(",", "").replace("-", "").replace(" ", "")
-        try:
-            tpv_val = int(val)
+        try: tpv_val = int(val)
         except: tpv_val = 0
         if tpv_regex.group(2): tpv_val *= 1000
-    if ramo_ali and tpv_val > 100000:
-        motivos.append("TPV alimentício acima de R$100mil")
 
-    # Muitas máquinas
-    maquinas_regex = re.search(r"(\d+)\s*(máquina|maquinas|maquininhas|maquininha)", relato)
-    if maquinas_regex and int(maquinas_regex.group(1)) >= 7:
-        motivos.append(f"Solicitação de {maquinas_regex.group(1)} máquinas")
-
-    # Modelos específicos
-    modelos_suspeitos = ["smart", "p2", "pinpad", "pin pad"]
-    if any(m in relato for m in modelos_suspeitos): motivos.append("Insistência por modelos Smart/P2/Pinpad")
-
-    # Conta pré-ativa/plano Flex solicitado
-    if any(t in relato for t in [
-        "pré-ativa", "preativa", "plano flex", "transferido do front", "conta pré-ativa"
-    ]):
-        motivos.append("Conta pré-ativa e/ou plano Flex solicitado")
-
-    # Cliente CPF sem comprovante de atividade (pontua para risco!)
-    cpf_presente = re.search(r"cpf", relato) is not None
-    comprovante_presente = any(c in relato for c in [
-        "comprovante", "fachada", "instagram", "facebook", "nota fiscal", "cartão", "transacional", "extrato"
-    ])
-    if cpf_presente and not comprovante_presente:
-        motivos.append("CPF sem comprovante de atividade")
-    if "sem comprovante de atividade" in relato or (cpf_presente and not comprovante_presente):
-        motivos.append("Cliente sem comprovante de atividade")
-
-    # Aceitação rápida sem negociar
-    aceitou_sem_negociar = any(
-        frase in relato for frase in [
-            "aceitou proposta sem negociar", "aceitou taxa sem negociar", "aceitou taxa", "aceitaram sem negociar", "aceitou proposta", "não negociou taxa"
-        ]
-    )
-    if aceitou_sem_negociar:
-        motivos.append("Aceitou proposta/taxa sem negociar")
-        dicas_extra.append("<span class='tip-highlight'>🟡 Bastante atenção: clientes legítimos costumam negociar taxas ou propostas. Questione o cliente sobre ofertas da concorrência e o motivo da aceitação imediata!</span>")
-
-    # CNAE divergente
-    cnae_div = any(x in relato for x in ["cnae diferente", "cnae divergente", "atividade diferente", "ramo divergente"])
-    if cnae_div:
-        motivos.append("CNAE do CNPJ divergente do ramo informado")
-        dicas_extra.append("<span class='tip-highlight'>🟡 Bastante atenção: Quando o CNAE do CNPJ não combina com o ramo de atividade informado, investigue documentação, histórico do negócio e consulte Sintegra/Receita Federal!</span>")
-
-    # CNPJ recém-aberto
-    cnpj_novo = any(x in relato for x in [
-        "cnpj novo", "cnpj criado há 30 dias", "cnpj aberto há 30 dias", "cnpj criado recentemente", "cnpj aberto recentemente", "cnpj recente"
-    ])
-    if cnpj_novo:
-        motivos.append("CNPJ criado nos últimos 30 dias")
-        dicas_extra.append("<span class='tip-highlight'>🟡 Bastante atenção: Empresas recém-abertas podem indicar tentativa de fraude. Solicite fotos, extratos de bancos e outras comprovações de atividade real. Sempre questione histórico e motivos da abertura recente.</span>")
-
-    # Verificação de endereço
-    if "endereço" in relato or "endereço de entrega" in relato or "localização" in relato:
-        sugestoes.add("Confirme se o endereço de entrega bate com o endereço do CNPJ e verifique no Google Maps se o local é idôneo.")
-    # Recomendações padrão
-    sugestoes.update([
-        "Solicite comprovante de atividade (fachada, redes sociais, notas fiscais, cartão de visita, extrato de vendas).",
-        "Pesquise o comprovante enviado no Google Imagens para verificar sua autenticidade.",
-        "Questione a necessidade real se o cliente pedir muitas máquinas ou modelos específicos.",
-        "Antes de credenciar, envie o APP e peça que o cliente realize o KYC."
-    ])
-
-    # Lógica para risco
-    alto_riscos = [
-        "TPV alimentício acima de R$100mil",
-        "Solicitação de 7 máquinas", "Solicitação de 8 máquinas",
-        "Insistência por modelos Smart/P2/Pinpad",
-        "Conta pré-ativa e/ou plano Flex solicitado",
-        "CPF sem comprovante de atividade",
-        "Aceitou proposta/taxa sem negociar",
-        "Cliente sem comprovante de atividade",
-        "CNAE do CNPJ divergente do ramo informado",
-        "CNPJ criado nos últimos 30 dias"
+    # Comprovante de atividade válido?
+    comprovante_keywords = [
+        "comprovante de atividade", "fachada", "instagram", "nota fiscal", "cartão",
+        "extrato", "foto da empresa", "comprovação válida", "comprovante válido", "rede social"
     ]
-    risco_encontrado = False
-    if ddd_sp and len(motivos) >= 4: risco_encontrado = True
-    if any(r in motivos for r in alto_riscos): risco_encontrado = True
+    comprovante_valido = any(c in relato for c in comprovante_keywords)
 
-    motivos_destacados = ", ".join([f"<span class='risk-highlight'>{m}</span>" for m in motivos])
+    cpf_presente = "cpf" in relato
+    cnpj_presente = "cnpj" in relato
+
+    # ---- ANÁLISE E LÓGICA ROBUSTA ----
+    # 1. CNPJ novo + sem comprovante
+    if cnpj_presente and cnpj_novo and not comprovante_valido:
+        motivos.append("CNPJ recém-aberto sem comprovação de atividade")
+        dicas_extra.append("<span class='tip-highlight'>🟡 Nunca credencie empresas recém-abertas sem documentação real do funcionamento! Exija fotos, extratos, presença digital, nota fiscal emitida etc.</span>")
+        perguntas_recomendadas.append("<span class='q-highlight'>Cliente tem comprovação clara e legítima que está realmente ativo? Essa foto/comprovante faz sentido?</span>")
+    
+    # 2. CNPJ novo + comprovante OK
+    if cnpj_presente and cnpj_novo and comprovante_valido:
+        motivos.append("CNPJ novo, apresentou comprovante válido")
+        dicas_extra.append("<span class='tip-highlight' style='color:#37FF8B;background:#112919;'>🟢 Cliente apresentou documentação. Cheque autenticidade e mantenha monitoramento nas primeiras semanas.</span>")
+        perguntas_recomendadas.append("<span class='q-highlight'>Comprovante fornecido é óbvio e legítimo, ou apenas uma foto genérica? Há indícios de operação real?</span>")
+
+    # 3. TPV muito alto (>100mil) SEM comprovante
+    if tpv_val > 100000 and not comprovante_valido:
+        motivos.append("TPV muito alto sem comprovante de atividade válido")
+        dicas_extra.append("<span class='tip-highlight'>🟡 Nunca aceite TPV elevado sem comprovação externa! Empresas que vendem muito têm como provar rapidamente a operação.</span>")
+        perguntas_recomendadas.append("<span class='q-highlight'>Solicite evidências proporcionais ao TPV informado.</span>")
+
+    # 4. TPV alto COM comprovante válido
+    if tpv_val > 100000 and comprovante_valido:
+        motivos.append("TPV alto, comprovante apresentado")  # isso NÃO é risco
+        dicas_extra.append("<span class='tip-highlight' style='color:#37FF8B;background:#112919;'>🟢 Cliente demonstrou/confirmou operações robustas. Acompanhe primeiras movimentações e siga rotina normal.</span>")
+
+    # 5. Aceitou tudo sem negociar
+    if aceitou_sem_negociar:
+        motivos.append("Aceitou taxa/proposta sem negociar")
+        dicas_extra.append("<span class='tip-highlight'>🟡 Clientes legítimos tendem a negociar taxas. Questione as referências do cliente, peça para comparar condições em outros bancos/adquirentes.</span>")
+        perguntas_recomendadas.append("<span class='q-highlight'>Você já comparou nossas condições com outras empresas? Por que aceitou tudo tão rápido?</span>")
+
+    # 6. CNAE divergente
+    if cnae_div:
+        motivos.append("CNAE divergente do segmento declarado")
+        dicas_extra.append("<span class='tip-highlight'>🟡 CNAE incoerente geralmente é sinal de que algo está escondido. Considere contato extra/consulta Sintegra e Google Maps.</span>")
+        perguntas_recomendadas.append("<span class='q-highlight'>O CNAE do CNPJ bate com o segmento que o cliente diz operar? Ele apresentou documentação do ramo ou só há divergência?</span>")
+
+    # 7. Muitos sinais conhecidos (máquinas, modelo)
+    if num_maquinas >= 7:
+        motivos.append(f"Solicitação de {num_maquinas} máquinas")
+        perguntas_recomendadas.append("<span class='q-highlight'>Por que tantas máquinas? Negócios legítimos com alto volume tendem a provar demanda por fotos/vídeos de balcão, equipe etc.</span>")
+    if modelos_risco:
+        motivos.append("Insistência por modelos Smart/P2/Pinpad")
+        perguntas_recomendadas.append("<span class='q-highlight'>Por que exige esse modelo? Qual diferença para o negócio? Exija argumentos reais.</span>")
+    if flex:
+        motivos.append("Conta pré-ativa/plano Flex transferido")
+        dicas_extra.append("<span class='tip-highlight'>🟡 Fique atento a fluxos pulados: fraude pode começar por facilitar demais onboarding.</span>")
+
+    if ramo_alimenticio:
+        motivos.append("Ramo alimentício")
+        perguntas_recomendadas.append("<span class='q-highlight'>O faturamento e quantidade de máquinas fazem sentido para o tamanho e perfil do estabelecimento?</span>")
+
+    # Recorrências documentais...
+    if cpf_presente and not comprovante_valido:
+        motivos.append("CPF sem comprovante de atividade")
+        perguntas_recomendadas.append("<span class='q-highlight'>NUNCA credencie CPF sem documento real. Tudo deve ser validado na fonte.</span>")
+    if "sem comprovante de atividade" in relato:
+        motivos.append("Cliente afirmou ausência de comprovante de atividade")
+        dicas_extra.append("<span class='tip-highlight'>🟡 Falta de comprovante é sempre motivo de investigação extra.</span>")
+
+    # Sinais extras para reforçar a cultura de não-credenciamento fácil
+    blacklist = ["fraude", "golpe", "documento falso", "nome sujo"]
+    if any(bl in relato for bl in blacklist):
+        motivos.append("Alerta: possível fraude conhecida no atendimento!")
+        dicas_extra.append("<span class='tip-highlight'>🚨 Avalie imediatamente com o time de prevenção!</span>")
+
+    # Recomendações extras geral
+    sugestoes.update([
+        "Use o Google Maps para checar lojas e endereços.",
+        "Pesquise o nome, telefone e razão social do cliente nos órgãos de proteção ao crédito.",
+        "Sempre peça nota fiscal, extrato, contrato social e demais provas que confirmem o modelo de negócio.",
+        "Confirme, se possível, que a pessoa apresentada como proprietário é mesmo quem movimenta o negócio.",
+        "Desconfie de pressa/desinteresse em apresentar documentação."
+    ])
+
+    # --- Lógica combinada para risco ---
+    alto_riscos = [
+        "CNPJ recém-aberto sem comprovação de atividade",
+        "TPV muito alto sem comprovante de atividade válido",
+        "CPF sem comprovante de atividade",
+        "Cliente afirmou ausência de comprovante de atividade",
+        "Solicitação de 7 máquinas",
+        "Solicitação de 8 máquinas",
+        "Insistência por modelos Smart/P2/Pinpad",
+        "Conta pré-ativa/plano Flex transferido",
+        "Aceitou taxa/proposta sem negociar",
+        "CNAE divergente do segmento declarado",
+        "Alerta: possível fraude conhecida no atendimento!"
+    ]
+    risco_encontrado = any(r in motivos for r in alto_riscos)
+    motivos_destacados = ", ".join([f"<span class='risk-highlight'>{m}</span>" for m in motivos]) if motivos else 'Nenhum motivo crítico identificado.'
+
+    # --- Resposta composta: balão, motivos, dicas e perguntas ---
     if risco_encontrado:
         resposta = (
-            f"<div class='analysis-bubble'>🕵️‍♀️ <span class='risk-highlight'>RISCO ENCONTRADO</span>.<br><b>Motivos:</b> {motivos_destacados}."
-            + (f"<br>{''.join(dicas_extra)}" if dicas_extra else "")
-            + "<br><b>Sugestões:</b><ul>"
-            + "".join([f"<li>{s}</li>" for s in sorted(sugestoes)])
-            + "</ul>🟡 <i>Alerta: Reforce a validação deste atendimento!</i></div>"
+            f"<div class='analysis-bubble'>🕵️‍♀️ <span class='risk-highlight'>RISCO ENCONTRADO</span>.<br>"
+            f"<b>Motivos:</b> {motivos_destacados}<br>"
+            + "".join(dicas_extra)
+            + "<br><b>Perguntas de investigação para você fazer ao cliente:</b><ul>"
+            + "".join([f"<li>{p}</li>" for p in perguntas_recomendadas]) + "</ul>"
+            + "<br><b>Sugestões finais:</b><ul>"
+            + "".join([f"<li>{s}</li>" for s in sorted(sugestoes)]) + "</ul>"
+            + "🟡 <i>Alerta: Nunca credencie apenas por boa conversa ou promessas. Siga a trilha de documentação!</i></div>"
         )
     else:
         resposta = (
             "<div class='analysis-bubble' style='color:#37FF8B;border-left:4px solid #22AA73;'>"
             "🕵️‍♀️ <span class='risk-highlight' style='color:#37FF8B;'>CLIENTE SEM RISCO ENCONTRADO</span>.<br>"
-            f"<b>Motivos:</b> {motivos_destacados if motivos else 'Nenhum motivo crítico identificado.'}"
-            "<br>Continue seguindo boas práticas de checagem e validação."
-            "</div>"
+            f"{''.join(dicas_extra)}"
+            "<br><b>Motivos:</b> Nenhum motivo crítico encontrado.<br>"
+            "<b>DICA:</b> Continue seguindo boas práticas de checagem e investigação.<br>"
+            "<b>Pergunte-se sempre:</b> Você teria confiança em credenciar esse cliente se a receita fosse sua?</div>"
         )
     return resposta
 
